@@ -1,0 +1,41 @@
+# Compiled python modules.
+*.pyc
+
+# Setuptools distribution folder.
+/dist/
+
+# Python egg metadata, regenerated from source files by setuptools.
+/*.egg-info
+/*.egg
+
+# files with '~'
+/*~
+
+*~
+
+
+
+#cache
+.cache/
+
+/config.ini
+.idea/
+config.ini
+
+#tests
+tests/test_outputs/
+
+new_requirement.txt
+/build_old/
+*.orig
+/.pypirc
+
+# os files
+.DS_Store
+
+# test
+example_NDVI_S2.cpg
+example_NDVI_S2.dbf
+example_NDVI_S2.prj
+example_NDVI_S2.shp
+example_NDVI_S2.shx
