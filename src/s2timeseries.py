@@ -225,13 +225,13 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
     
     return newdf
 
-def _plotsquare(df, square):
+def plot_group(df, group, index, year):
     
     # Quick dirty time series plotting
 
-    sqr = df[df.SQUARE==square]
+    sqr = df[df[group]==index]
     
-    yrcols = [y for y in sqr.columns if '2016' in y]
+    yrcols = [y for y in sqr.columns if year in y]
     
     ndplotvals = sqr[yrcols]
     

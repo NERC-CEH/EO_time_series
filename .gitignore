@@ -17,6 +17,8 @@
 
 #cache
 .cache/
+__pycache__
+
 
 /config.ini
 .idea/
