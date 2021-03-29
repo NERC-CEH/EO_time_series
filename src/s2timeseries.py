@@ -151,22 +151,10 @@ def _s2_tseries(lat, lon, collection="COPERNICUS/S2", start_date='2016-01-01',
     # For entry to a shapefile must be this way up
     return nd.transpose()
     
-# Main
-    
-#inShp = '/home/ciaran/SOC-D/SOC-D-CSS/CSVeg20161819.shp'
-#
-#outfile = '/home/ciaran/SOC-D/SOC-D-CSS/CSVeg20161819_NDVI_S2.shp'
-#
-#gdf = gpd.read_file(inShp)
 
-# the parallel version
-    
-
-      
-#lons, lats = _points_to_pixel(gdf)
-
-# Until I figure this out a quick dirty answer - this took almost 2mins....
+# A quick/dirty answer but not an efficient one - this took almost 2mins....
 # ... so is very slow....
+# TODO - gee -based map (jscript def) type function to replace CPU-based one
 
 def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
                end_date='2016-12-31', dist=20, cloud_mask=True, 
@@ -237,53 +225,7 @@ def plot_group(df, group, index, year):
     
     ndplotvals.transpose().plot.line()
 
-## This is for a shapefile
-#wdf.index = gdf.index
-#
-## For plotting reasons
-#fwdft = wdf.transpose()
-#
-## eg - well that isn't much good is it lots of missing values
-#fwdft.loc[:,0:100].plot.line()
-#
-## Without cloud ######################################
-#wocld = Parallel(n_jobs=-1, verbose=2)(delayed(s2_tseries)(lats[p], lons[p],
-#               para=True) for p in idx) 
-## With the cloud mask - not sure whether this is helpful
-## Should probably rename to months......
-#finaldf = pd.DataFrame(wocld)#.reset_index()
-## This is for a shapefile
-#finaldf.index = gdf.index
-#
-## For plotting reasons
-#fdft = finaldf.transpose()
-#
-## eg - well that isn't much good is it lots of missing values
-#fdft.loc[:,0:100].plot.line()
-#
-## Comapre the 2 
-#
-#fdft.loc[:,3].plot.line()
-#fwdft.loc[:,3].plot.line()
-#
-#### Save a new shape
-#
-## Sort columns back out agan
-#
-#finaldf.columns = finaldf.columns.strftime("%Y-%m-%d").to_list()
-#
-#newdf = pd.merge(gdf, finaldf, on=gdf.index)
-#newdf.to_file(outfile)
-#
-## Quick dirty time series plotting
-## One assumes things will be similar in the same square!
-#sqr = newdf[newdf.SQUARE==637]
-#
-#yrcols = [y for y in sqr.columns if '2016' in y]
-#
-#ndplotvals = sqr[yrcols]
-#
-#ndplotvals.transpose().plot.line()
+
 
 
 
