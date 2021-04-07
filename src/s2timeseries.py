@@ -200,7 +200,7 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
     idx = np.arange(0, len(lons))
     
     wcld = Parallel(n_jobs=-1, verbose=2)(delayed(_s2_tseries)(lats[p], lons[p],
-                   cloud_mask=False, para=True) for p in idx) 
+                   cloud_mask=cloud_mask, para=True) for p in idx) 
     
     finaldf = pd.DataFrame(wcld)
     
