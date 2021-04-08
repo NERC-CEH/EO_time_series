@@ -41,3 +41,15 @@ example_NDVI_S2.dbf
 example_NDVI_S2.prj
 example_NDVI_S2.shp
 example_NDVI_S2.shx
+test.cpg
+test.dbf
+test.prj
+test.shp
+test.shx
+testclean.cpg
+testclean.dbf
+testclean.prj
+testclean.shp
+testclean.shx
+
+/metdwn/
