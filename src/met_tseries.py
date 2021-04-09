@@ -182,10 +182,75 @@ def met_time_series(inRas, inShp, outfile, prop, espgin=None, espgout=None):
 
 
 
+def tseries_group(df, name, other_inds=None):
+    
+    """
+    Extract time series of a particular variable e.g. rain
+    
+    Parameters
+    ----------
+    
+    df: byte
+        input pandas/geopandas df
+    
+    name: string
+          the identifiable string e.g. rain, which can be part or all of 
+          column name
+                      
+    year: string
+            the year of interest
+    
+    other_inds: string
+            other columns to be included 
+
+    """
+    # probably a more elegant way...but works
+    ncols = [y for y in df.columns if name in y]
+    
+    # if we wish to include something else
+    if other_inds != None:
+        ncols = other_inds + ncols
+        
+    
+    newdf = df[ncols]
+    
+    return newdf
 
 
+def plot_group(df, group, index, name):
+    
+    """
+    Plot time series per CSS square eg for S2 ndvi or met var
+    
+    Parameters
+    ----------
+    
+    df: byte
+        input pandas/geopandas df
+    
+    group: string
+          the attribute to group by
+          
+    index: int
+            the index of interest
+            
+    name: string
+            the name of interest
 
+    
+    """
+    
+    # Quick dirty time series plotting
 
+    sqr = df[df[group]==index]
+    
+    yrcols = [y for y in sqr.columns if name in y]
+    
+    ndplotvals = sqr[yrcols]
+    
+    ndplotvals.transpose().plot.line()
+    
+    #return ndplotvals
 
 
 

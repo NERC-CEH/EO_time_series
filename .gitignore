@@ -51,5 +51,9 @@ testclean.dbf
 testclean.prj
 testclean.shp
 testclean.shx
-
+CSS2016_MET_ndvi.cpg
+CSS2016_MET_ndvi.dbf
+CSS2016_MET_ndvi.prj
+CSS2016_MET_ndvi.shp
+CSS2016_MET_ndvi.shx
 /metdwn/

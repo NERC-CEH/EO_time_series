@@ -162,7 +162,7 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
     
     
     """
-    Time series from a single coordinate using gee
+    Time series from a point shapefile 
     
     Parameters
     ----------
@@ -204,7 +204,9 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
     
     finaldf = pd.DataFrame(wcld)
     
-    finaldf.columns = finaldf.columns.strftime("%Y-%m-%d").to_list()
+    finaldf.columns = finaldf.columns.strftime("%m-%d").to_list()
+    
+    finaldf.columns = ["nd-"+c for c in finaldf.columns]
 
     newdf = pd.merge(gdf, finaldf, on=gdf.index)
     
@@ -213,19 +215,43 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
     
     return newdf
 
-def plot_group(df, group, index, year):
+def plot_group(df, group, index, name):
+    
+    """
+    Plot time series per CSS square eg for S2 ndvi or met var
+    
+    Parameters
+    ----------
+    
+    df: byte
+        input pandas/geopandas df
+    
+    group: string
+          the attribute to group by
+          
+    index: int
+            the index of interest
+            
+    name: string
+            the name of interest
+
+    
+    """
     
     # Quick dirty time series plotting
 
     sqr = df[df[group]==index]
     
-    yrcols = [y for y in sqr.columns if year in y]
+    yrcols = [y for y in sqr.columns if name in y]
     
     ndplotvals = sqr[yrcols]
     
     ndplotvals.transpose().plot.line()
+    
+    #return ndplotvals
 
 
+    
 
 
 
