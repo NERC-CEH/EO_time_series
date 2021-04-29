@@ -20,6 +20,8 @@ dependencies:
   - joblib
   - tqdm
   - earthengine-api
+  - glob2
 
   - pip:
     - ContrailOnlineCAClient
+    - geemap
