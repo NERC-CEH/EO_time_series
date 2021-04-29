@@ -25,7 +25,7 @@ __pycache__
 config.ini
 
 #tests
-tests/test_outputs/
+tests/
 
 new_requirement.txt
 /build_old/
@@ -35,25 +35,14 @@ new_requirement.txt
 # os files
 .DS_Store
 
-# test
-example_NDVI_S2.cpg
-example_NDVI_S2.dbf
-example_NDVI_S2.prj
-example_NDVI_S2.shp
-example_NDVI_S2.shx
-test.cpg
-test.dbf
-test.prj
-test.shp
-test.shx
-testclean.cpg
-testclean.dbf
-testclean.prj
-testclean.shp
-testclean.shx
-CSS2016_MET_ndvi.cpg
-CSS2016_MET_ndvi.dbf
-CSS2016_MET_ndvi.prj
-CSS2016_MET_ndvi.shp
-CSS2016_MET_ndvi.shx
-/metdwn/
+# test - i dont trust it
+tests/*.cpg
+tests/*.dbf
+tests/*.prj
+tests/*.shp
+tests/*.shx
+tests/*.nc
+
+# more tests
+*.zip
+
