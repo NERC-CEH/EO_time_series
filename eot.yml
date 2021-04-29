@@ -21,6 +21,7 @@ dependencies:
   - tqdm
   - earthengine-api
   - glob2
+  - xarray
 
   - pip:
     - ContrailOnlineCAClient
