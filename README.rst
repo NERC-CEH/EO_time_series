@@ -3,7 +3,9 @@ EO times series.
 
 A brief demo of extracting time series for a point shapefile and writing as attributes. This is not exhaustive, simply what has been required of a recent project
 
-I have just provided cut down modules locally in the directory src. Provided you are using the notebook herein you can import the functions from the local files. 
+I have just provided cut down modules locally in the directory src. Provided you are using the notebook herein you can import the functions from the local files.
+
+This will likely be added to over time.  
 
 Installation and Use
 ~~~~~~~~~~~~~~~~~~~~
