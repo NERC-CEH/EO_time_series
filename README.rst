@@ -22,3 +22,7 @@ jupyter notebook
 
 Then open the ipynb and cycle through the cells.
 
+Notes
+~~~~~
+
+You may note the functions spread the tasks client-side rather than server-side. Having written both, it becomes a case of moving the bottleneck between either client threads or file download from google if using server side parallelism. At present the file download is unreliable from google, and takes about the same length of time as spreading the process client side, hence the reliable clientside approach is used. Improvements on this welcome!
