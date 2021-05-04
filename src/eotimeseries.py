@@ -440,7 +440,7 @@ def _S1_date(entry):
 
 
 def _s1_tseries(lat, lon, start_date='2016-01-01',
-               end_date='2016-12-31', dist=20,  polar='both',
+               end_date='2016-12-31', dist=20,  polar='VVVH',
                orbit='ASCENDING', stat='mean', month=True, para=True):
     
     """
@@ -484,18 +484,20 @@ def _s1_tseries(lat, lon, start_date='2016-01-01',
     
     # give the point a distance to ensure we are on a pixel
     df = _get_s1_prop(start_date, end_date, geometry,
-                          polar=polar, orbit=orbit, dist=10)
+                          polar=polar, orbit=orbit, dist=dist)
     
     # a band ratio that will be useful to go here
     # the typical one that is used
     # TODO - is this really informative? - more filters required?
-    df['VVVH'] = (df['VV'] / df['VH'])
+    if polar == 'VVVH':
+        df['VVVH'] = (df['VV'] / df['VH'])
     
     # May change to this for merging below
     df = df.set_index(df['Date'])
     
     # ratio
-    nd = pd.Series(df['VVVH'])
+    nd = pd.Series(df[polar])
+    
 
     # A monthly dataframe 
     # Should be max or upper 95th looking at NDVI
@@ -642,14 +644,14 @@ def S1_ts(gdf, lats, lons, start_date='2016-01-01',
     idx = np.arange(0, len(lons))
     
     wcld = Parallel(n_jobs=-1, verbose=2)(delayed(_s1_tseries)(lats[p], lons[p],
-                   orbit=orbit, stat=stat, month=month,
+                   orbit=orbit, stat=stat, month=month, polar=polar,
                    para=para) for p in idx) 
     
     finaldf = pd.DataFrame(wcld)
     
     finaldf.columns = finaldf.columns.strftime("%m-%d").to_list()
     
-    finaldf.columns = [polar+c for c in finaldf.columns]
+    finaldf.columns = [polar+'-'+c for c in finaldf.columns]
 
     newdf = pd.merge(gdf, finaldf, on=gdf.index)
     
