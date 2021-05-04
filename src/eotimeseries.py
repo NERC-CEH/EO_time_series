@@ -513,7 +513,7 @@ def _s1_tseries(lat, lon, start_date='2016-01-01',
     return nd.transpose()
 
 
-def _get_s1_prop(start_date, end_date, geometry, polar='both', orbit='both', dist=10):
+def _get_s1_prop(start_date, end_date, geometry, polar='VVVH', orbit='both', dist=10):
     
     """
     Get region info for a point geometry for S1 using filters
@@ -548,7 +548,7 @@ def _get_s1_prop(start_date, end_date, geometry, polar='both', orbit='both', dis
                        end_date)
     
     # should we return both?
-    if polar == "both":
+    if polar == "VVVH":
         pol_select = s1.filter(ee.Filter.eq('instrumentMode', 'IW')).filterBounds(geometry)
         
         #s1f = s1.filter(ee.Filter.eq('instrumentMode', 'IW'))
@@ -586,7 +586,7 @@ def _get_s1_prop(start_date, end_date, geometry, polar='both', orbit='both', dis
     return df
 
 def S1_ts(gdf, lats, lons, start_date='2016-01-01',
-               end_date='2016-12-31', dist=20,  polar='both',
+               end_date='2016-12-31', dist=20,  polar='VVVH',
                orbit='ASCENDING', stat='mean', outfile=None, month=True,
                para=True):
     
@@ -614,7 +614,7 @@ def S1_ts(gdf, lats, lons, start_date='2016-01-01',
              the distance around point e.g. 20m
              
     polar: string
-             send receive characteristic - VV, VH or both
+             send receive characteristic - VV, VH or VVVH
              
     orbit: string
              the orbit direction - either 'ASCENDING' or 'DESCENDING'
@@ -649,7 +649,7 @@ def S1_ts(gdf, lats, lons, start_date='2016-01-01',
     
     finaldf.columns = finaldf.columns.strftime("%m-%d").to_list()
     
-    finaldf.columns = ["vvvh-"+c for c in finaldf.columns]
+    finaldf.columns = [polar+c for c in finaldf.columns]
 
     newdf = pd.merge(gdf, finaldf, on=gdf.index)
     
