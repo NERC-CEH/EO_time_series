@@ -313,8 +313,6 @@ def _s2_tseries(lat, lon, collection="COPERNICUS/S2", start_date='2016-01-01',
     
 
 # A quick/dirty answer but not an efficient one - this took almost 2mins....
-# ... so is very slow....
-# TODO - gee -based map (jscript def) type function to replace CPU-based one
 
 def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
                end_date='2016-12-31', dist=20, cloud_mask=True, 
@@ -353,6 +351,10 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
              
     cloud_perc: int
              the acceptable cloudiness per pixel in addition to prev arg
+    
+    outfile: string
+           the output shapefile if required
+             
              
     Returns
     -------
@@ -439,7 +441,7 @@ def _S1_date(entry):
 
 def _s1_tseries(lat, lon, start_date='2016-01-01',
                end_date='2016-12-31', dist=20,  polar='both',
-               orbit='ASCENDING', stat='mean', month=True):
+               orbit='ASCENDING', stat='mean', month=True, para=True):
     
     """
     Time series from a single coordinate using gee
@@ -585,7 +587,8 @@ def _get_s1_prop(start_date, end_date, geometry, polar='both', orbit='both', dis
 
 def S1_ts(gdf, lats, lons, start_date='2016-01-01',
                end_date='2016-12-31', dist=20,  polar='both',
-               orbit='ASCENDING', stat='mean', month=True, para=True):
+               orbit='ASCENDING', stat='mean', outfile=None, month=True,
+               para=True):
     
     
     """
@@ -618,6 +621,9 @@ def S1_ts(gdf, lats, lons, start_date='2016-01-01',
     
     month: bool
             aggregate to month
+            
+    outfile: string
+               the output shapefile if required
              
     Returns
     -------
@@ -643,7 +649,7 @@ def S1_ts(gdf, lats, lons, start_date='2016-01-01',
     
     finaldf.columns = finaldf.columns.strftime("%m-%d").to_list()
     
-    finaldf.columns = ["nd-"+c for c in finaldf.columns]
+    finaldf.columns = ["vvvh-"+c for c in finaldf.columns]
 
     newdf = pd.merge(gdf, finaldf, on=gdf.index)
     
