@@ -1,5 +1,5 @@
 """
-A few functions for extracting of time series for Sentinel 2 data with the
+A few functions for extracting of time series from S1/S2 data with GEE with a
 
 view to comparing it with something else 
 
@@ -13,14 +13,14 @@ import numpy as np
 from tqdm import tqdm
 from joblib import Parallel, delayed
 import geemap
+from osgeo import ogr, osr
+import os
+import json
 
-# TODO - anonymise the dataset and process online rather than spreading the 
-# jobs across threads on machine
+ogr.UseExceptions()
+osr.UseExceptions()
 
-# perhaps consider
-# geemap.sentinel2_timeseries(
-
-def get_month_ndperc(start_date, end_date, roi, collection="COPERNICUS/S2"):
+def get_month_ndperc(start_date, end_date, geom, collection="COPERNICUS/S2"):
     
     """
     Make a monthly ndvi 95th percentile composite collection
@@ -34,8 +34,8 @@ def get_month_ndperc(start_date, end_date, roi, collection="COPERNICUS/S2"):
     end_date: string
                     end date of time series
     
-    roi: GEE geometry object
-          the gee geometry to constrain the collection
+    geom: string
+          an ogr compatible file with an extent
           
     collection: string
                 the ee image collection  
@@ -46,12 +46,15 @@ def get_month_ndperc(start_date, end_date, roi, collection="COPERNICUS/S2"):
     GEE collection of monthly NDVI images
     
     """
-    #TODO  make the stat a parameter and change the func to output any stat
+    
+
+    roi = extent2poly(geom)
+    
     imcol = ee.ImageCollection(
             collection).filterDate(start_date, end_date).filterBounds(roi)
     
     months = ee.List.sequence(1, 12)
-
+    
     def _funcmnth(m):
         
         filtered = imcol.filter(ee.Filter.calendarRange(start=m, field='month'))
@@ -59,12 +62,109 @@ def get_month_ndperc(start_date, end_date, roi, collection="COPERNICUS/S2"):
         composite = filtered.reduce(ee.Reducer.percentile([95]))
         
         return composite.normalizedDifference(
-                ['B4_p95', 'B3_p95']).rename('NDVI').set('month', m)
+                ['B8_p95', 'B4_p95']).rename('NDVI').set('month', m)
     
     composites = ee.ImageCollection.fromImages(months.map(_funcmnth))
     
     return composites
+
+def extent2poly(inshp, outfile=None, filetype="ESRI Shapefile", 
+                   geecoord=True):
     
+    """
+    Get the coordinates of a layers extent, save a polygon and return a GEE geom
+    
+    This will convert to wgs84 lat lon by default
+    
+    Parameters
+    ----------
+    
+    inshp: string
+            input ogr compatible geometry file
+    
+    outfile: string
+            the path of the output file, if not specified, it will be input file
+            with 'extent' added on before the file type
+    
+    filetype: string
+            ogr comapatible file type (see gdal/ofr docs) default 'ESRI Shapefile'
+            ensure your outfile string has the equiv. e.g. '.shp'
+    
+    geecoord: bool
+           convert to WGS84 lat,lon - necessary for GEE
+           
+    Returns
+    -------
+    
+    a GEE polygon geometry
+    
+    """
+    # ogr read in etc
+    vds = ogr.Open(inshp)
+    lyr = vds.GetLayer()
+    ext = lyr.GetExtent()
+    
+    # make the linear ring 
+    ring = ogr.Geometry(ogr.wkbLinearRing)
+    ring.AddPoint(ext[0],ext[2])
+    ring.AddPoint(ext[1], ext[2])
+    ring.AddPoint(ext[1], ext[3])
+    ring.AddPoint(ext[0], ext[3])
+    ring.AddPoint(ext[0], ext[2])
+    
+    # drop the geom into poly object
+    poly = ogr.Geometry(ogr.wkbPolygon)
+    poly.AddGeometry(ring)
+    
+    if geecoord == True:
+        # Getting spatial reference of input 
+        srs = lyr.GetSpatialRef()
+    
+        # make WGS84 projection reference3
+        wgs84 = osr.SpatialReference()
+        wgs84.ImportFromEPSG(4326)
+    
+        # OSR transform
+        transform = osr.CoordinateTransformation(srs, wgs84)
+        # apply
+        poly.Transform(transform)
+    
+    # in case we wish to write it for later....    
+    if outfile == None:
+        outfile = inshp[:-4]+'extent.shp'
+        
+    out_drv = ogr.GetDriverByName(filetype)
+    
+    # remove output shapefile if it already exists
+    if os.path.exists(outfile):
+        out_drv.DeleteDataSource(outfile)
+    
+    # create the output shapefile
+    ootds = out_drv.CreateDataSource(outfile)
+    ootlyr = ootds.CreateLayer("extent", geom_type=ogr.wkbPolygon)
+    
+    # add an ID field
+    idField = ogr.FieldDefn("id", ogr.OFTInteger)
+    ootlyr.CreateField(idField)
+    
+    # create the feature and set values
+    featureDefn = ootlyr.GetLayerDefn()
+    feature = ogr.Feature(featureDefn)
+    feature.SetGeometry(poly)
+    feature.SetField("id", 1)
+    ootlyr.CreateFeature(feature)
+    feature = None
+    
+    # Save and close 
+    ootds.FlushCache()
+    ootds = None
+    # gee doesn't like the json for some weird reason     
+    # outpoly = json.loads(poly.ExportToJson())
+    # hence we have this hack solution
+    outpoly = geemap.shp_to_ee(outfile)
+    
+    return outpoly
+
 
 def zonal_tseries(collection, start_date, end_date, inShp, bandnm='NDVI',
                   attribute='id'):
@@ -107,7 +207,8 @@ def zonal_tseries(collection, start_date, end_date, inShp, bandnm='NDVI',
     This function is not reliable with every image collection at present
     
     """
-    
+    # Overly elaborate, unreliable and fairly likely to be dumped 
+
     # shp/json to gee feature here
     # if #filetype is something:
     'converting to ee feature'
@@ -167,13 +268,14 @@ def zonal_tseries(collection, start_date, end_date, inShp, bandnm='NDVI',
     df = geemap.ee_to_pandas(table)
     # bin the const GEE index
     df = df.drop(columns=['system:index'])
-    
+    #Nope.....
+    #geemap.ee_export_vector(table, outfile)
     
     
     return df
     
 
-def _points_to_pixel(gdf, espgin='epsg:27700', espgout='epsg:4326'):
+def points_to_pixel(gdf, espgin='epsg:27700', espgout='epsg:4326'):
     """
     convert some points from one proj to the other and return pixel coords
     and lon lats for some underlying raster
@@ -314,13 +416,13 @@ def _s2_tseries(lat, lon, collection="COPERNICUS/S2", start_date='2016-01-01',
 
 # A quick/dirty answer but not an efficient one - this took almost 2mins....
 
-def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
+def S2_ts(lons, lats, inshp, collection="COPERNICUS/S2", start_date='2016-01-01',
                end_date='2016-12-31', dist=20, cloud_mask=True, 
                stat='max', cloud_perc=100, para=False, outfile=None):
     
     
     """
-    Time series from a point shapefile 
+    Monthly time series from a point shapefile 
     
     Parameters
     ----------
@@ -331,8 +433,8 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
     lats: int
              lat for point
              
-    gdf: geopandas dframe
-                a geopandas dataframe with which to join the results
+    inshp: string
+                a shapefile to join the results to 
               
     collection: string
                     the S2 collection either.../S2 or .../S2_SR
@@ -372,6 +474,11 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
     
     idx = np.arange(0, len(lons))
     
+    gdf = gpd.read_file(inshp)
+    
+    if 'key_0' in gdf.columns:
+        gdf = gdf.drop(columns=['key_0'])
+    
     datalist = Parallel(n_jobs=-1, verbose=2)(delayed(_s2_tseries)(lats[p], lons[p],
                     collection=collection,
                     start_date=start_date,
@@ -382,7 +489,7 @@ def S2_ts(lons, lats, gdf, collection="COPERNICUS/S2", start_date='2016-01-01',
     
     finaldf = pd.DataFrame(datalist)
     
-    finaldf.columns = finaldf.columns.strftime("%m-%d").to_list()
+    finaldf.columns = finaldf.columns.strftime("%y-%m").to_list()
     
     finaldf.columns = ["nd-"+c for c in finaldf.columns]
 
@@ -551,13 +658,15 @@ def _get_s1_prop(start_date, end_date, geometry, polar='VVVH', orbit='both', dis
     
     # should we return both?
     if polar == "VVVH":
-        pol_select = s1.filter(ee.Filter.eq('instrumentMode', 'IW')).filterBounds(geometry)
+        pol_select = s1.filter(ee.Filter.eq('instrumentMode',
+                                            'IW')).filterBounds(geometry)
         
         #s1f = s1.filter(ee.Filter.eq('instrumentMode', 'IW'))
     else:
         # select only one...
-        s1f = s1.filter(ee.Filter.listContains('transmitterReceiverPolarisation', polar))\
-        .filter(ee.Filter.eq('instrumentMode', 'IW'))
+        s1f = s1.filter(ee.Filter.listContains('transmitterReceiverPolarisation',
+                                               polar)).filter(ee.Filter.eq(
+                                                       'instrumentMode', 'IW'))
         # emit/recieve characteristics
         pol_select = s1f.select(polar).filterBounds(geometry)
 
@@ -587,17 +696,20 @@ def _get_s1_prop(start_date, end_date, geometry, polar='VVVH', orbit='both', dis
  
     return df
 
-def S1_ts(gdf, lats, lons, start_date='2016-01-01',
+def S1_ts(inshp, lats, lons, start_date='2016-01-01',
                end_date='2016-12-31', dist=20,  polar='VVVH',
                orbit='ASCENDING', stat='mean', outfile=None, month=True,
                para=True):
     
     
     """
-    Sentinel 1 time series from a point shapefile
+    Sentinel 1 month time series from a point shapefile
     
     Parameters
     ----------
+    
+    inshp: string
+            a shapefile to join the results to 
     
     lat: int
              lat for point
@@ -640,16 +752,22 @@ def S1_ts(gdf, lats, lons, start_date='2016-01-01',
     quicker than dowloading it all from the server side
     
     """
+    gdf = gpd.read_file(inshp)
+    
+    if 'key_0' in gdf.columns:
+        gdf = gdf.drop(columns=['key_0'])
     
     idx = np.arange(0, len(lons))
     
     wcld = Parallel(n_jobs=-1, verbose=2)(delayed(_s1_tseries)(lats[p], lons[p],
-                   orbit=orbit, stat=stat, month=month, polar=polar,
-                   para=para) for p in idx) 
+                    start_date=start_date,
+                    end_date=end_date,
+                    orbit=orbit, stat=stat, month=month, polar=polar, 
+                    para=para) for p in idx) 
     
     finaldf = pd.DataFrame(wcld)
     
-    finaldf.columns = finaldf.columns.strftime("%m-%d").to_list()
+    finaldf.columns = finaldf.columns.strftime("%y-%m").to_list()
     
     finaldf.columns = [polar+'-'+c for c in finaldf.columns]
 
@@ -744,4 +862,67 @@ def tseries_group(df, name, other_inds=None):
 #
 #yip = withMean.aggregate_array('NDVI').getInfo()
 
-
+#def zonal_tseries(inShp, collection, start_date, end_date, outfile,  
+#                  bandnm='NDVI', attribute='id'):
+#    
+#    """
+#    Zonal Time series for a feature collection 
+#    
+#    Parameters
+#    ----------
+#    
+#    inShp: string
+#                a shapefile in the WGS84 lat/lon proj
+#              
+#    collection: string
+#                    the image collection  best if this is agg'd monthly or 
+#                    something
+#    
+#    start_date: string
+#                    start date of time series
+#    
+#    end_date: string
+#                    end date of time series
+#             
+#    bandnm: string
+#             the bandname of choice that exists or has been created in 
+#             the image collection  e.g. B1 or NDVI
+#            
+#    attribute: string
+#                the attribute for filtering (required for GEE)
+#                
+#    Returns
+#    -------
+#    
+#    shapefile (saved) and pandas dataframe
+#    
+#    Notes
+#    -----
+#    
+#    Unlike the other tseries functions here, this operates server side, meaning
+#    the bottleneck is in the download/conversion to shapefile/geojson
+#    """
+#    
+#    
+#    shp = geemap.shp_to_ee(inShp)
+#    
+#    # name the img
+#    def rename_band(img):
+#        return img.select([0], [img.id()])
+#    
+#    
+#    stacked_image = collection.map(rename_band).toBands()
+#    
+#    # get the img scale
+#    scale = collection.first().projection().nominalScale()
+#    
+#    # the finished feat collection
+#    ts = ee.Image(stacked_image).reduceRegions(collection=shp,
+#                 reducer=ee.Reducer.mean(), scale=scale)
+#    
+#    geemap.ee_export_vector(ts, outfile)
+#    
+#    # TODO return a dataframe?
+#    gdf = gpd.read_file(outfile)
+#    
+#    return gdf 

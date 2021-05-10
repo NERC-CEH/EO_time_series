@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 
 A module to write a met time series to a CSS point file 
@@ -20,6 +19,7 @@ from pyproj import Transformer
 #from tqdm import tqdm
 from osgeo import gdal#, ogr
 
+gdal.UseExceptions()
 
 # The ancillary functions
 
@@ -39,7 +39,7 @@ def _get_nc(inRas, lyr='rainfall'):
     # to MODIS but not the MET stuff
     
     rds = gdal.Open(inRas)
-    rds.GetGeoTransform()
+
     
     rgt = rds.GetGeoTransform()
     
@@ -141,6 +141,9 @@ def met_time_series(inRas, inShp, outfile, prop, espgin=None, espgout=None):
     # Just in case I wish to move away from OGR shock horror....
     gdf = gpd.read_file(inShp)
     
+    if 'key_0' in gdf.columns:
+        gdf = gdf.drop(columns=['key_0'])
+        
     # the rgt and img array
     rgt, img = _get_nc(inRas, lyr=prop)
     
@@ -154,7 +157,7 @@ def met_time_series(inRas, inShp, outfile, prop, espgin=None, espgout=None):
     times = _get_times(inRas)
     
     # cut the year so we can give a name
-    cols = list(times.index.strftime("%m-%d"))
+    cols = list(times.index.strftime("%y-%m"))
     
     cols = [prop[0:4]+"-"+c for c in cols]
     
@@ -174,8 +177,7 @@ def met_time_series(inRas, inShp, outfile, prop, espgin=None, espgout=None):
     # why is there a duplicate value key_0 for index ?
     #- returns a bug of  duplicate values
     # index without this long param list to hack around it
-    newdf = pd.merge(gdf, nddf, how='left', left_index=True,
-                     right_index=True, on=gdf.index)
+    newdf = pd.merge(gdf, nddf, how='left', on=gdf.index)
         
     
     newdf.to_file(outfile)
