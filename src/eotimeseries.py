@@ -13,7 +13,7 @@ import numpy as np
 from tqdm import tqdm
 from joblib import Parallel, delayed
 import geemap
-from osgeo import ogr, osr
+from osgeo import ogr, osr, gdal
 import os
 import json
 
@@ -48,7 +48,7 @@ def get_month_ndperc(start_date, end_date, geom, collection="COPERNICUS/S2"):
     """
     
 
-    roi = extent2poly(geom)
+    roi = extent2poly(geom, filetype='polygon')
     
     imcol = ee.ImageCollection(
             collection).filterDate(start_date, end_date).filterBounds(roi)
@@ -68,30 +68,114 @@ def get_month_ndperc(start_date, end_date, geom, collection="COPERNICUS/S2"):
     
     return composites
 
-def extent2poly(inshp, outfile=None, filetype="ESRI Shapefile", 
-                   geecoord=True):
+def _feat2dict(lyr, idx, transform=None):
+    """
+    convert an ogr feat to a dict
+    """
+    feat = lyr.GetFeature(idx)
+    geom = feat.GetGeometryRef()
+    if transform != None:
+        geom.Transform(transform)
+    
+    js = geom.ExportToJson()
+    geoj = json.loads(js)
+    
+    # bloody GEE again infuriating
+    # prefers lon, lat for points but the opposite for polygons
+    # TODO - better fix is required....
+    if geoj['type'] == "Point":
+        new = [geoj["coordinates"][1], geoj["coordinates"][0]]
+        geoj["coordinates"]=new
+        
+    return geoj
+
+def poly2dictlist(inShp, wgs84=False):
     
     """
-    Get the coordinates of a layers extent, save a polygon and return a GEE geom
-    
-    This will convert to wgs84 lat lon by default
+    Convert an ogr to a list of json like dicts
     
     Parameters
     ----------
     
-    inshp: string
-            input ogr compatible geometry file
+    inShp: string
+            input OGR compatible polygon
+    
+    """
+    vds = ogr.Open(inShp)
+    lyr = vds.GetLayer()
+    
+    if wgs84 == True:
+        # Getting spatial reference of input 
+        srs = lyr.GetSpatialRef()
+    
+        # make WGS84 projection reference3
+        wgs84 = osr.SpatialReference()
+        wgs84.ImportFromEPSG(4326)
+    
+        # OSR transform
+        transform = osr.CoordinateTransformation(srs, wgs84)
+        
+    
+    features = np.arange(lyr.GetFeatureCount()).tolist()
+    
+    # results in the repetiton of first one bug
+    # feat = lyr.GetNextFeature() 
+
+    oot = [_feat2dict(lyr, f, transform=transform) for f in features]
+    
+    return oot
+    
+    
+
+def _raster_extent(inras):
+    
+    """
+    Parameters
+    ----------
+    
+    inras: string
+        input gdal raster (already opened)
+    
+    """
+    rds = gdal.Open(inras)
+    rgt = rds.GetGeoTransform()
+    minx = rgt[0]
+    maxy = rgt[3]
+    maxx = minx + rgt[1] * rds.RasterXSize
+    miny = maxy + rgt[5] * rds.RasterYSize
+    ext = (minx, miny, maxx, maxy)
+    
+    return ext
+
+
+def extent2poly(infile, filetype='polygon', outfile=True, polytype="ESRI Shapefile", 
+                   geecoord=False):
+    
+    """
+    Get the coordinates of a files extent and return an ogr polygon ring with 
+    the option to save the  
+    
+    
+    Parameters
+    ----------
+    
+    infile: string
+            input ogr compatible geometry file or gdal raster
+            
+    filetype: string
+            the path of the output file, if not specified, it will be input file
+            with 'extent' added on before the file type
     
     outfile: string
             the path of the output file, if not specified, it will be input file
             with 'extent' added on before the file type
     
-    filetype: string
-            ogr comapatible file type (see gdal/ofr docs) default 'ESRI Shapefile'
+    polytype: string
+            ogr comapatible file type (see gdal/ogr docs) default 'ESRI Shapefile'
             ensure your outfile string has the equiv. e.g. '.shp'
     
     geecoord: bool
-           convert to WGS84 lat,lon - necessary for GEE
+           optionally convert to WGS84 lat,lon
            
     Returns
     -------
@@ -100,9 +184,14 @@ def extent2poly(inshp, outfile=None, filetype="ESRI Shapefile",
     
     """
     # ogr read in etc
-    vds = ogr.Open(inshp)
-    lyr = vds.GetLayer()
-    ext = lyr.GetExtent()
+    if filetype == 'raster':
+        ext = _raster_extent(infile)
+        
+    else:
+        # tis a vector
+        vds = ogr.Open(infile)
+        lyr = vds.GetLayer()
+        ext = lyr.GetExtent()
     
     # make the linear ring 
     ring = ogr.Geometry(ogr.wkbLinearRing)
@@ -128,39 +217,41 @@ def extent2poly(inshp, outfile=None, filetype="ESRI Shapefile",
         transform = osr.CoordinateTransformation(srs, wgs84)
         # apply
         poly.Transform(transform)
+        
+        tproj = wgs84
+    else:
+        tproj = lyr.GetSpatialRef()
     
     # in case we wish to write it for later....    
-    if outfile == None:
-        outfile = inshp[:-4]+'extent.shp'
+    if outfile != None:
+        outfile = infile[:-4]+'extent.shp'
         
-    out_drv = ogr.GetDriverByName(filetype)
+        out_drv = ogr.GetDriverByName(polytype)
+        
+        # remove output shapefile if it already exists
+        if os.path.exists(outfile):
+            out_drv.DeleteDataSource(outfile)
+        
+        # create the output shapefile
+        ootds = out_drv.CreateDataSource(outfile)
+        ootlyr = ootds.CreateLayer("extent", tproj, geom_type=ogr.wkbPolygon)
+        
+        # add an ID field
+        idField = ogr.FieldDefn("id", ogr.OFTInteger)
+        ootlyr.CreateField(idField)
+        
+        # create the feature and set values
+        featureDefn = ootlyr.GetLayerDefn()
+        feature = ogr.Feature(featureDefn)
+        feature.SetGeometry(poly)
+        feature.SetField("id", 1)
+        ootlyr.CreateFeature(feature)
+        feature = None
+        
+        # Save and close 
+        ootds.FlushCache()
+        ootds = None
     
-    # remove output shapefile if it already exists
-    if os.path.exists(outfile):
-        out_drv.DeleteDataSource(outfile)
-    
-    # create the output shapefile
-    ootds = out_drv.CreateDataSource(outfile)
-    ootlyr = ootds.CreateLayer("extent", geom_type=ogr.wkbPolygon)
-    
-    # add an ID field
-    idField = ogr.FieldDefn("id", ogr.OFTInteger)
-    ootlyr.CreateField(idField)
-    
-    # create the feature and set values
-    featureDefn = ootlyr.GetLayerDefn()
-    feature = ogr.Feature(featureDefn)
-    feature.SetGeometry(poly)
-    feature.SetField("id", 1)
-    ootlyr.CreateFeature(feature)
-    feature = None
-    
-    # Save and close 
-    ootds.FlushCache()
-    ootds = None
-    # gee doesn't like the json for some weird reason     
-    # outpoly = json.loads(poly.ExportToJson())
-    # hence we have this hack solution
     outpoly = geemap.shp_to_ee(outfile)
     
     return outpoly
@@ -311,12 +402,29 @@ def _conv_date(entry):
     # the dt entry
     oot = datetime.strptime(dt, "%Y%m%d")
     
-    return oot
-    
+    return oot    
 
-# The main process
+def _conv_dateS1(entry):
     
-def _s2_tseries(lat, lon, collection="COPERNICUS/S2", start_date='2016-01-01',
+    # TODO I'm sure there is a better way....
+    # split based on the _ then take the first block of string
+    dt = entry.split(sep='_')[5][0:8]
+    
+    # the dt entry
+    oot = datetime.strptime(dt, "%Y%m%d")
+    
+    return oot  
+
+def simplify(fc):
+    def feature2dict(f):
+            id = f['id']
+            out = f['properties']
+            out.update(id=id)
+            return out
+    out = [feature2dict(x) for x in fc['features']]
+    return out
+        
+def _s2_tseries(geometry,  collection="COPERNICUS/S2", start_date='2016-01-01',
                end_date='2016-12-31', dist=20, cloud_mask=True, 
                stat='max', cloud_perc=100, para=False):
     
@@ -326,12 +434,11 @@ def _s2_tseries(lat, lon, collection="COPERNICUS/S2", start_date='2016-01-01',
     Parameters
     ----------
     
-    lat: int
-             lat for point
-    
-    lon: int
-              lon for pont
-              
+    geometry: list
+                either [lon,lat] fot a point, or a set of coordinates for a 
+                polygon
+
+
     collection: string
                     the S2 collection either.../S2 or .../S2_SR
     
@@ -355,26 +462,59 @@ def _s2_tseries(lat, lon, collection="COPERNICUS/S2", start_date='2016-01-01',
     if para == True:
         ee.Initialize()
     
+    # has to reside in here in order for para execution
+    def _reduce_region(image):
+        # cheers geeextract!   
+        """Spatial aggregation function for a single image and a polygon feature"""
+        stat_dict = image.reduceRegion(fun, geometry, 30);
+        # FEature needs to be rebuilt because the backend doesn't accept to map
+        # functions that return dictionaries
+        return ee.Feature(None, stat_dict)
     
     S2 = ee.ImageCollection(collection).filterDate(start_date,
                        end_date).filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',
                        cloud_perc))
-
-
-    # a point
-    geometry = ee.Geometry.Point(lon, lat)
     
-    # give the point a distance to ensure we are on a pixel
-    s2list = S2.filterBounds(geometry).getRegion(geometry, dist).getInfo()
+    if geometry['type'] == 'Polygon':
+        
+        # cheers geeextract folks 
+        if stat == 'mean':
+            fun = ee.Reducer.mean()
+        elif stat == 'median':
+            fun = ee.Reducer.median()
+        elif stat == 'max':
+            fun = ee.Reducer.max()
+        elif stat == 'min':
+            fun = ee.Reducer.min()
+        elif stat == 'perc':
+            # for now as don't think there is equiv
+            fun = ee.Reducer.mean()
+        else:
+            raise ValueError('Must be one of mean, median, max, or min')
+        geomee = ee.Geometry.Polygon(geometry['coordinates'])
+        
+        s2List = S2.filterBounds(geomee).map(_reduce_region).getInfo()
+        s2List = simplify(s2List)
+        
+        df = pd.DataFrame(s2List)
+        
+    elif geometry['type'] == 'Point':
     
-    # the headings of the data
-    cols = s2list[0]
+        # a point
+        geomee = ee.Geometry.Point(geometry['coordinates'])
+        # give the point a distance to ensure we are on a pixel
+        s2list = S2.filterBounds(geometry).getRegion(geometry, dist).getInfo()
     
-    # the rest
-    rem=s2list[1:len(s2list)]
-    
-    # now a big df to reduce somewhat
-    df = pd.DataFrame(data=rem, columns=cols)
+        # the headings of the data
+        cols = s2list[0]
+        
+        # the rest
+        rem=s2list[1:len(s2list)]
+        
+        # now a big df to reduce somewhat
+        df = pd.DataFrame(data=rem, columns=cols)
+    else:
+        raise ValueError('geom must be either Polygon or Point')
 
     # get a proper date
     df['Date'] = df['id'].apply(_conv_date)
@@ -406,7 +546,11 @@ def _s2_tseries(lat, lon, collection="COPERNICUS/S2", start_date='2016-01-01',
     # Should be max or upper 95th looking at NDVI
     if stat == 'max':
         nd = nd.resample(rule='M').max()
-    if stat == 'perc':
+    if stat == 'mean':
+        nd = nd.resample(rule='M').mean()
+    if stat == 'median':
+        nd = nd.resample(rule='M').max()
+    elif stat == 'perc':
         # avoid potential outliers
         nd = nd.resample(rule='M').quantile(.95)
     
@@ -416,8 +560,8 @@ def _s2_tseries(lat, lon, collection="COPERNICUS/S2", start_date='2016-01-01',
 
 # A quick/dirty answer but not an efficient one - this took almost 2mins....
 
-def S2_ts(lons, lats, inshp, collection="COPERNICUS/S2", start_date='2016-01-01',
-               end_date='2016-12-31', dist=20, cloud_mask=True, 
+def S2_ts(inshp, collection="COPERNICUS/S2", reproj=False,
+          start_date='2016-01-01', end_date='2016-12-31', dist=20, cloud_mask=True, 
                stat='max', cloud_perc=100, para=False, outfile=None):
     
     
@@ -426,18 +570,15 @@ def S2_ts(lons, lats, inshp, collection="COPERNICUS/S2", start_date='2016-01-01'
     
     Parameters
     ----------
-    
-    lons: int
-              lon for pont
-    
-    lats: int
-             lat for point
              
     inshp: string
                 a shapefile to join the results to 
               
     collection: string
                     the S2 collection either.../S2 or .../S2_SR
+    
+    reproj: bool
+                whether to reproject to wgs84, lat/lon
     
     start_date: string
                     start date of time series
@@ -468,18 +609,26 @@ def S2_ts(lons, lats, inshp, collection="COPERNICUS/S2", start_date='2016-01-01'
     
     This spreads the point queries client side, meaning the bottleneck is the 
     of threads you have. This is maybe 'evened out' by returning the full dataframe 
-    quicker than dowloading it all from the server side
+    quicker than dowloading it all from the server side and loading back into memory
     
     """
+    # possible to access via gpd & the usual shapely fare....
+    # geom = gdf['geometry'][0]
+    # geom.exterior.coords.xy
+    # but will lead to issues....
     
-    idx = np.arange(0, len(lons))
+    geom = poly2dictlist(inshp, wgs84=reproj)
+    
+    idx = np.arange(0, len(geom))
     
     gdf = gpd.read_file(inshp)
     
+    # silly gpd issue
     if 'key_0' in gdf.columns:
         gdf = gdf.drop(columns=['key_0'])
     
-    datalist = Parallel(n_jobs=-1, verbose=2)(delayed(_s2_tseries)(lats[p], lons[p],
+    datalist = Parallel(n_jobs=-1, verbose=2)(delayed(_s2_tseries)(
+                    geom[p],
                     collection=collection,
                     start_date=start_date,
                     end_date=end_date,
@@ -500,7 +649,7 @@ def S2_ts(lons, lats, inshp, collection="COPERNICUS/S2", start_date='2016-01-01'
     
     return newdf
 
-def plot_group(df, group, index, name):
+def plot_group(df, group, index, name, year=None):
     
     """
     Plot time series per CSS square eg for S2 ndvi or met var
@@ -519,6 +668,9 @@ def plot_group(df, group, index, name):
             
     name: string
             the name of interest
+    
+    year: string
+            the year to summarise e.g. '16' for 2016 (optional)
 
     
     """
@@ -529,6 +681,11 @@ def plot_group(df, group, index, name):
     
     yrcols = [y for y in sqr.columns if name in y]
     
+    if year != None:
+        if len(year) > 2:
+            raise ValueError('year must be last 2 digits eg 16 for 2016') 
+        yrcols = [y for y in yrcols if year in y]
+        
     ndplotvals = sqr[yrcols]
     
     ndplotvals.transpose().plot.line()
@@ -546,7 +703,7 @@ def _S1_date(entry):
     return oot
 
 
-def _s1_tseries(lat, lon, start_date='2016-01-01',
+def _s1_tseries(geometry, start_date='2016-01-01',
                end_date='2016-12-31', dist=20,  polar='VVVH',
                orbit='ASCENDING', stat='mean', month=True, para=True):
     
@@ -556,13 +713,9 @@ def _s1_tseries(lat, lon, start_date='2016-01-01',
     Parameters
     ----------
     
-    lat: int
-             lat for point
-    
-    lon: int
-              lon for pont
-             
-    
+    geometry: json like
+             coords of point or polygon
+
     start_date: string
                     start date of time series
     
@@ -585,9 +738,9 @@ def _s1_tseries(lat, lon, start_date='2016-01-01',
     # joblib hack - this is gonna need to run in gee directly i think
     if para == True:
         ee.Initialize()
+        
+        
     
-    # a point
-    geometry = ee.Geometry.Point(lon, lat)
     
     # give the point a distance to ensure we are on a pixel
     df = _get_s1_prop(start_date, end_date, geometry,
@@ -622,7 +775,8 @@ def _s1_tseries(lat, lon, start_date='2016-01-01',
     return nd.transpose()
 
 
-def _get_s1_prop(start_date, end_date, geometry, polar='VVVH', orbit='both', dist=10):
+def _get_s1_prop(start_date, end_date, geometry, polar='VVVH', orbit='both',
+                 stat='mean', dist=10):
     
     """
     Get region info for a point geometry for S1 using filters
@@ -631,7 +785,7 @@ def _get_s1_prop(start_date, end_date, geometry, polar='VVVH', orbit='both', dis
     ----------
     
     geometry: ee geometry (json like)
-              lon for pont
+              
               
     polar: string
             either VV, VH or both
@@ -650,6 +804,14 @@ def _get_s1_prop(start_date, end_date, geometry, polar='VVVH', orbit='both', dis
     'id', 'longitude', 'latitude', 'Date', 'VV', 'VH', 'angle'
     
     """
+    
+    def _reduce_region(image):
+        # cheers geeextract!   
+        """Spatial aggregation function for a single image and a polygon feature"""
+        stat_dict = image.reduceRegion(fun, geometry, 30);
+        # FEature needs to be rebuilt because the backend doesn't accept to map
+        # functions that return dictionaries
+        return ee.Feature(None, stat_dict)
     
     # TODO - Needs tidied up conditional statements are a bit of a mess
     # the collection
@@ -675,28 +837,58 @@ def _get_s1_prop(start_date, end_date, geometry, polar='VVVH', orbit='both', dis
          orbf = pol_select.filter(ee.Filter.eq('orbitProperties_pass', orbit))
     else:
         orbf = pol_select
+        
+    if geometry['type'] == 'Polygon':
+        
+        # cheers geeextract folks 
+        if stat == 'mean':
+            fun = ee.Reducer.mean()
+        elif stat == 'median':
+            fun = ee.Reducer.median()
+        elif stat == 'max':
+            fun = ee.Reducer.max()
+        elif stat == 'min':
+            fun = ee.Reducer.min()
+        elif stat == 'perc':
+            # for now as don't think there is equiv
+            fun = ee.Reducer.mean()
+        else:
+            raise ValueError('Must be one of mean, median, max, or min')
+        geomee = ee.Geometry.Polygon(geometry['coordinates'])
+        
+        s1List = orbf.filterBounds(geomee).map(_reduce_region).getInfo()
+        s1List = simplify(s1List)
+        
+        df = pd.DataFrame(s1List)
+        
+        df['Date'] = df['id'].apply(_conv_dateS1)
+    
+    elif geometry['type'] == 'Point':
+        geomee = ee.Geometry.Point(geometry['coordinates'])
+        # a point
+        geomee = ee.Geometry.Point(geomee)
+        
+        # get the point info 
+        s1list = orbf.getRegion(geomee, dist).getInfo()
+        
+        cols = s1list[0]
+        
+        # stay consistent with S2 stuff
+        cols[3]='Date'
+        
+        # the rest
+        rem=s1list[1:len(s1list)]
+    
+        # now a big df to reduce somewhat
+        df = pd.DataFrame(data=rem, columns=cols)
 
-    # get the point info 
-    s1list = orbf.getRegion(geometry, dist).getInfo()
-    
-    cols = s1list[0]
-    
-    # stay consistent with S2 stuff
-    cols[3]='Date'
-    
-    # the rest
-    rem=s1list[1:len(s1list)]
-    
-    # now a big df to reduce somewhat
-    df = pd.DataFrame(data=rem, columns=cols)
-
-    # get a "proper" date - 
-    df['Date'] = pd.to_datetime(df['Date'], unit='ms')
+        # get a "proper" date - 
+        df['Date'] = pd.to_datetime(df['Date'], unit='ms')
 
  
     return df
 
-def S1_ts(inshp, lats, lons, start_date='2016-01-01',
+def S1_ts(inshp, start_date='2016-01-01', reproj=False, 
                end_date='2016-12-31', dist=20,  polar='VVVH',
                orbit='ASCENDING', stat='mean', outfile=None, month=True,
                para=True):
@@ -711,12 +903,8 @@ def S1_ts(inshp, lats, lons, start_date='2016-01-01',
     inshp: string
             a shapefile to join the results to 
     
-    lat: int
-             lat for point
-    
-    lon: int
-              lon for pont
-             
+    reproj: bool
+            whether to reproject to wgs84, lat/lon
     
     start_date: string
                     start date of time series
@@ -754,12 +942,14 @@ def S1_ts(inshp, lats, lons, start_date='2016-01-01',
     """
     gdf = gpd.read_file(inshp)
     
+    geom = poly2dictlist(inshp, wgs84=reproj)
+    
+    idx = np.arange(0, len(geom))
+    
     if 'key_0' in gdf.columns:
         gdf = gdf.drop(columns=['key_0'])
-    
-    idx = np.arange(0, len(lons))
-    
-    wcld = Parallel(n_jobs=-1, verbose=2)(delayed(_s1_tseries)(lats[p], lons[p],
+      
+    wcld = Parallel(n_jobs=-1, verbose=2)(delayed(_s1_tseries)(geom[p],
                     start_date=start_date,
                     end_date=end_date,
                     orbit=orbit, stat=stat, month=month, polar=polar, 
@@ -839,6 +1029,8 @@ def tseries_group(df, name, other_inds=None):
     newdf = df[ncols]
     
     return newdf
+
+
 
 # a notable alternative
 #import ee

@@ -29,7 +29,7 @@ parser.add_argument("-cssfile", "--css", type=str, required=True,
                     help="countryside survey point shapefile")
 
 parser.add_argument("-folder", "--fldr", type=str, required=True, 
-                    help="The path of the ")
+                    help="The path of the folder to work in")
 
 
 

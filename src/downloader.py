@@ -1,7 +1,7 @@
 # encoding: utf-8
 """
 
-From CEDA github with madditions and changes by Ciaran Robb
+From CEDA github with additions and changes by Ciaran Robb
 
 ===================
 
@@ -20,6 +20,9 @@ from cryptography.hazmat.backends import default_backend
 from contrail.security.onlineca.client import OnlineCaClient
 from joblib import Parallel, delayed
 from tqdm import tqdm
+from urllib.parse import urljoin
+from urllib.request import urlopen 
+from functools import reduce
 
 CERTS_DIR = os.path.expanduser('~/.certs')
 if not os.path.isdir(CERTS_DIR):
@@ -115,7 +118,7 @@ def setup_sesh(user, password):
     os.environ['CEDA_PASSWORD'] = password
 
 
-def dload(file_url, folder):
+def dload(file_url, folder, method='requests'):
     """
     Download a file from the CEDA archive
     
@@ -141,16 +144,29 @@ def dload(file_url, folder):
         return
 
     # Download file to current working directory
-    response = requests.get(file_url, cert=(CREDENTIALS_FILE_PATH), verify=False)
+    # requests is a bit unreliable with the nextmap data
+    if method != 'requests':
+        response = urlopen(file_url)  
+        finalrep = response.read()
+    else:
+        response = requests.get(file_url, cert=(CREDENTIALS_FILE_PATH), verify=False)
+        finalrep = response.content
+        
     filename = file_url.rsplit('/', 1)[-1]
     final = os.path.join(folder, filename)
+    
+    # dwnld
     with open(final, 'wb') as file_object:
-        file_object.write(response.content)
+        file_object.write(finalrep)
+    # some problem is occurring with a repeat download of the first file
+    del response, finalrep, filename, file_object
     
     return final
 
 
-def dloadbatch(urls, folder, para=False, nt=-1):
+
+
+def dloadbatch(urls, folder, para=False, nt=-1, method='requests'):
     
     """
     Download a batch of files from the CEDA archive
@@ -167,6 +183,9 @@ def dloadbatch(urls, folder, para=False, nt=-1):
     para: bool
         whether to process in parallel def. False
     
+    method: string
+        requests or urllib
+    
     Returns
     -------
     list of file paths
@@ -175,7 +194,8 @@ def dloadbatch(urls, folder, para=False, nt=-1):
     with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             if para == True:
-                paths = Parallel(n_jobs=nt, verbose=2)(delayed(dload)(u, folder) for u in urls)
+                paths = Parallel(n_jobs=nt, verbose=2)(delayed(dload)(
+                        u, folder, method=method) for u in urls)
             else:
                 paths = [dload(u, folder) for u in tqdm(urls)]
     return paths
