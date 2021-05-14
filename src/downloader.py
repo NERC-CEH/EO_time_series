@@ -20,9 +20,12 @@ from cryptography.hazmat.backends import default_backend
 from contrail.security.onlineca.client import OnlineCaClient
 from joblib import Parallel, delayed
 from tqdm import tqdm
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlencode
 from urllib.request import urlopen 
 from functools import reduce
+from ftplib import FTP
+from osgeo import gdal
+from tqdm import tqdm
 
 CERTS_DIR = os.path.expanduser('~/.certs')
 if not os.path.isdir(CERTS_DIR):
@@ -146,7 +149,7 @@ def dload(file_url, folder, method='requests'):
     # Download file to current working directory
     # requests is a bit unreliable with the nextmap data
     if method != 'requests':
-        response = urlopen(file_url)  
+        response = urlopen(file_url, data)  
         finalrep = response.read()
     else:
         response = requests.get(file_url, cert=(CREDENTIALS_FILE_PATH), verify=False)
@@ -162,7 +165,6 @@ def dload(file_url, folder, method='requests'):
     del response, finalrep, filename, file_object
     
     return final
-
 
 
 
@@ -201,4 +203,102 @@ def dloadbatch(urls, folder, para=False, nt=-1, method='requests'):
     return paths
     
 
+def dtmftp(user, passwd, ftp_path, main_dir):
+    
+    """
+    Download the files for a nextmap dtm folder
+    
+    Parameters
+    ----------
+    
+    user: string
+            CEDA usernm
+            
+    passwd: string
+            CEDA passwd
+    
+    ftp_path:string
+            the ftp path to dir containing the DTM eg
+            'neodc/nextmap/by_tile/sh/sh60/dtm/sh60dtm/'
+    
+    main_dir: string
+                the local dir in which all subdirs and files are dwnlded
+            
+    
+    """
+    # as it is parallel required ....
+    ftp = FTP("ftp.ceda.ac.uk", "", "")
+    ftp.login(user=user, passwd=passwd)
+    # navigate to the dir
+    ftp.cwd(ftp_path)
+    # I hate ESRI
+    esri_types = ['dblbnd.adf', 'hdr.adf', 'prj.adf',
+              'sta.adf', 'w001001.adf', 'w001001x.adf']
+    # outdir in which the dinosaur format goes 
+    dirname = os.path.join(main_dir, ftp_path.split(sep="/")[6])
+    if not os.path.isdir(dirname):
+        os.mkdir(dirname) 
+    # loop through the files and write to disk
+    for e in esri_types:
+        localfile = os.path.join(dirname, e)
+        with open(localfile, "wb") as lf:
+            ftp.retrbinary('RETR ' + e, lf.write, 1024)
+    # why is this not quitting.....
+    ftp.quit()
+    return dirname
 
+def dtmftp_mt(user, passwd, ftplist, main_dir):
+    
+    """
+    Download the files for a nextmap dtm folder
+    
+    Parameters
+    ----------
+    
+    user: string
+            CEDA usernm
+            
+    passwd: string
+            CEDA passwd
+    
+    ftplist: list of strings
+            a list containing ftp paths like below
+            ['neodc/nextmap/by_tile/sh/sh60/dtm/sh60dtm/']
+    
+    main_dir: string
+                the local dir in which all subdirs and files are dwnlded
+            
+    
+    """
+    
+    out = Parallel(n_jobs=8, verbose=2)(delayed(dtmftp)(
+            user, passwd, f, main_dir) for f in ftplist)
+    
+    return out
+
+
+def batch_translate(inlist):
+    
+    """
+    batch translate a load of gdal files from some format to tif
+    
+    Parameters
+    ----------
+    
+    inlist: string
+        A list of raster paths
+    
+    """
+    
+    for i in tqdm(inlist):
+        hd, _ = os.path.split(i)
+        ootpth = hd+".tif"
+        srcds = gdal.Open(i)
+        out = gdal.Translate(ootpth, srcds)
+        out.FlushCache()
+        out = None
+        
+def replace_str(template, t):
+    out1 = template.replace('hp', t[0:2])
+    out2 = out1.replace('40', t[2:4])
+    return out2

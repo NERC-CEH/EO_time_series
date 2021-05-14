@@ -3,6 +3,8 @@ A few functions for extracting of time series from S1/S2 data with GEE with a
 
 view to comparing it with something else 
 
+@author: Ciaran Robb
+
 """
 import ee
 import pandas as pd
