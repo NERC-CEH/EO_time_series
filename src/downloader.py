@@ -1,7 +1,9 @@
 # encoding: utf-8
 """
 
-From CEDA github with additions and changes by Ciaran Robb
+DAP dwnloads adapted from CEDA templates with additions and changes by Ciaran Robb
+
+The remainder functions for files ftp by Ciaran Robb
 
 ===================
 
@@ -307,6 +309,9 @@ def batch_translate(inlist):
     return outpths
         
 def replace_str(template, t):
+    """
+    replace strings for nextmap downloads
+    """
     out1 = template.replace('hp', t[0:2])
     out2 = out1.replace('40', t[2:4])
     return out2
