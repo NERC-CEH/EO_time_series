@@ -12,7 +12,6 @@ The remainder functions for files ftp by Ciaran Robb
 
 # Import standard libraries
 import os
-import sys
 import datetime
 import requests
 import warnings
@@ -22,12 +21,9 @@ from cryptography.hazmat.backends import default_backend
 from contrail.security.onlineca.client import OnlineCaClient
 from joblib import Parallel, delayed
 from tqdm import tqdm
-from urllib.parse import urljoin, urlencode
 from urllib.request import urlopen 
-from functools import reduce
 from ftplib import FTP
-from osgeo import gdal
-from tqdm import tqdm
+
 
 CERTS_DIR = os.path.expanduser('~/.certs')
 if not os.path.isdir(CERTS_DIR):
@@ -151,7 +147,7 @@ def dload(file_url, folder, method='requests'):
     # Download file to current working directory
     # requests is a bit unreliable with the nextmap data
     if method != 'requests':
-        response = urlopen(file_url, data)  
+        response = urlopen(file_url)  
         finalrep = response.read()
     else:
         response = requests.get(file_url, cert=(CREDENTIALS_FILE_PATH), verify=False)
@@ -279,39 +275,3 @@ def dtmftp_mt(user, passwd, ftplist, main_dir):
     return out
 
 
-def batch_translate(inlist):
-    
-    """
-    batch translate a load of gdal files from some format to tif
-    
-    Parameters
-    ----------
-    
-    inlist: string
-        A list of raster paths
-    
-    Returns
-    -------
-    
-    List of file paths
-    
-    """
-    outpths = []
-    
-    for i in tqdm(inlist):
-        hd, _ = os.path.split(i)
-        ootpth = hd+".tif"
-        srcds = gdal.Open(i)
-        out = gdal.Translate(ootpth, srcds)
-        out.FlushCache()
-        out = None
-        outpths.append(ootpth)
-    return outpths
-        
-def replace_str(template, t):
-    """
-    replace strings for nextmap downloads
-    """
-    out1 = template.replace('hp', t[0:2])
-    out2 = out1.replace('40', t[2:4])
-    return out2
