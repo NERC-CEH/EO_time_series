@@ -288,7 +288,13 @@ def batch_translate(inlist):
     inlist: string
         A list of raster paths
     
+    Returns
+    -------
+    
+    List of file paths
+    
     """
+    outpths = []
     
     for i in tqdm(inlist):
         hd, _ = os.path.split(i)
@@ -297,6 +303,8 @@ def batch_translate(inlist):
         out = gdal.Translate(ootpth, srcds)
         out.FlushCache()
         out = None
+        outpths.append(ootpth)
+    return outpths
         
 def replace_str(template, t):
     out1 = template.replace('hp', t[0:2])
