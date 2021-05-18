@@ -5,15 +5,15 @@ A brief demo of extracting time series for a point shapefile and writing as attr
 
 **Met_data_tseries.ipynb**
 
-Download and attribute a geometry file with met office climate modelling data
+Attribute a geometry file with met office climate modelling data from the CEDA archive. 
 
 **S1_&_S2time_series.ipynb**
 
-Download and attribute a geometry file with S2 NDVI and S1 GRD-based time series.
+Attribute a geometry file with S2 NDVI and S1 GRD-based time series. 
 
 **Nextmapprocessing.ipynb**
 
-Download, process and attribute a geometry file with Nextmap elevation data and derivatives. 
+Attribute a geometry file with Nextmap elevation data and derivatives from the CEDA archive. 
 
 I have just provided cut down modules locally in the directory src. Provided you are using the notebook herein you can import the functions from the local files.
 
