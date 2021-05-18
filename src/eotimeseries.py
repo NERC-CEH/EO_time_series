@@ -102,6 +102,11 @@ def poly2dictlist(inShp, wgs84=False):
     inShp: string
             input OGR compatible polygon
     
+    Returns
+    -------
+    
+    List of dicts
+    
     """
     vds = ogr.Open(inShp)
     lyr = vds.GetLayer()
@@ -116,6 +121,8 @@ def poly2dictlist(inShp, wgs84=False):
     
         # OSR transform
         transform = osr.CoordinateTransformation(srs, wgs84)
+    else:
+        transform=None
         
     
     features = np.arange(lyr.GetFeatureCount()).tolist()
@@ -539,7 +546,8 @@ def _s2_tseries(geometry,  collection="COPERNICUS/S2", start_date='2016-01-01',
     
     # May change to this for merging below
     df = df.set_index(df['Date'])
-    nd = pd.Series(df['ndvi'])
+    # due to the occasional bug being an object
+    nd = pd.to_numeric(pd.Series(df['ndvi']))
     # return nd
     # may be an idea to label the 'id' as a contant val or something
     # dump the redundant  columns

@@ -1,11 +1,21 @@
 EO times series.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A brief demo of extracting time series for a point shapefile and writing as attributes. This is not exhaustive, simply what has been required of a recent project
+A brief demo of extracting time series for a point shapefile and writing as attributes. This is not exhaustive, simply what has been required of a recent project. Two of these require CEDA credentials to access data and the S1/S2 requires a google earth engine account. 
+
+**Met_data_tseries.ipynb**
+
+Download and attribute a geometry file with met office climate modelling data
+
+**S1_&_S2time_series.ipynb**
+
+Download and attribute a geometry file with S2 NDVI and S1 GRD-based time series.
+
+**Nextmapprocessing.ipynb**
+
+Download, process and attribute a geometry file with Nextmap elevation data and derivatives. 
 
 I have just provided cut down modules locally in the directory src. Provided you are using the notebook herein you can import the functions from the local files.
-
-This will likely be added to over time.  
 
 Installation and Use
 ~~~~~~~~~~~~~~~~~~~~

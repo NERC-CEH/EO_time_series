@@ -106,7 +106,7 @@ del gdf
 # See the README.rst for an explanation of why client parallelism is used here
 # Updates/improvements welcome....
 for d in dates:
-    _ = eot.S2_ts(lons, lats, inShp, collection="COPERNICUS/S2", start_date=d[0],
+    _ = eot.S2_ts(inShp, collection="COPERNICUS/S2", start_date=d[0],
       end_date=d[1], dist=10, cloud_mask=False, stat='perc', 
       cloud_perc=100, para=True, outfile=inShp)
     
@@ -114,7 +114,7 @@ for d in dates:
 # This will be labelled VVVH in the attributes
 for d in dates:
     print(d)
-    _ = eot.S1_ts(inShp, lats, lons, start_date=d[0],
+    _ = eot.S1_ts(inShp, start_date=d[0],
                end_date=d[1], dist=20,  polar='VVVH',
                orbit='ASCENDING', stat='mean', outfile=inShp, month=True,
                para=True)
